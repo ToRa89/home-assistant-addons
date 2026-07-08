@@ -2,6 +2,8 @@
 
 This repository contains a custom add-on that integrates Anthropic's Claude Code CLI with Home Assistant.
 
+> **This is a personal fork** of [heytcass/home-assistant-addons](https://github.com/heytcass/home-assistant-addons), maintained by [@ToRa89](https://github.com/ToRa89). All credit for the original add-on goes to [@heytcass](https://github.com/heytcass) — this fork exists to keep applying fixes and features while the upstream repository sees less active maintenance.
+
 ## Installation
 
 To add this repository to your Home Assistant instance:
@@ -9,7 +11,7 @@ To add this repository to your Home Assistant instance:
 1. Go to **Settings** → **Add-ons** → **Add-on Store**
 2. Click the three dots menu in the top right corner
 3. Select **Repositories**
-4. Add the URL: `https://github.com/heytcass/home-assistant-addons`
+4. Add the URL: `https://github.com/ToRa89/home-assistant-addons`
 5. Click **Add**
 
 ## Add-ons
@@ -46,6 +48,8 @@ Tools built by the community to enhance Claude Terminal:
 If you have any questions or issues with this add-on, please create an issue in this repository.
 
 ## Credits
+
+Huge thanks to [@heytcass](https://github.com/heytcass) for creating and building out the original Claude Terminal add-on that this fork is based on.
 
 This add-on was created with the assistance of Claude Code itself! The development process, debugging, and documentation were all completed using Claude's AI capabilities.
 

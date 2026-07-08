@@ -1,3 +1,3 @@
-name: Claude Terminal for Home Assistant
-url: https://github.com/heytcass/home-assistant-addons
-maintainer: Tom Cassady <heytcass@gmail.com>
+name: Claude Terminal for Home Assistant (ToRa89 fork)
+url: https://github.com/ToRa89/home-assistant-addons
+maintainer: ToRa89 (fork of the original by Tom Cassady <heytcass@gmail.com>)
