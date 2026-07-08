@@ -35,6 +35,14 @@ init_environment() {
     export ANTHROPIC_CONFIG_DIR="$claude_config_dir"
     export ANTHROPIC_HOME="/data"
 
+    # One-time cleanup of npm caches accumulated in /data before the image
+    # started pinning npm_config_cache to /tmp (see issue #103) - these were
+    # silently inflating every Home Assistant backup by gigabytes.
+    if [ -d "$data_home/.npm" ]; then
+        bashio::log.info "Removing legacy npm cache from persistent data ($data_home/.npm)..."
+        rm -rf "$data_home/.npm"
+    fi
+
     # Migrate any existing authentication files from legacy locations
     migrate_legacy_auth_files "$claude_config_dir"
 
