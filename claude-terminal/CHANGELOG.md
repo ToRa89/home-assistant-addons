@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.3
+
+### 🐛 Bug Fixes
+- **Fixed npm cache bloating Home Assistant backups** (#103): `HOME` points at the persistent `/data/home` for auth persistence, so npm defaulted its global cache there too, growing to several GB and getting swept into every backup. Pinned `npm_config_cache` to `/tmp/npm-cache` (not persisted, not backed up) and added a one-time startup cleanup of any legacy cache already sitting in `/data/home/.npm`.
+
 ## 2.2.2
 
 ### 🐛 Bug Fixes

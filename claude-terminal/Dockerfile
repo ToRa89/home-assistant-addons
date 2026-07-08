@@ -22,6 +22,12 @@ RUN apk add --no-cache \
     tmux \
     yq
 
+# Keep npm's cache out of the persistent /data volume at runtime. HOME is
+# pointed at /data/home for auth persistence (see run.sh), so without this
+# any npm invocation defaults its cache to $HOME/.npm and that cache is
+# then swept into every Home Assistant backup (see issue #103).
+ENV npm_config_cache=/tmp/npm-cache
+
 # Install Claude Code CLI via npm (avoids musl binary compatibility issues)
 RUN npm install -g @anthropic-ai/claude-code@latest \
     && npm cache clean --force
