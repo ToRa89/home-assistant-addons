@@ -24,8 +24,10 @@ panel_admin: true
 # Port configuration
 ports:
   7681/tcp: null
+  2222/tcp: null
 ports_description:
   7681/tcp: "Web terminal (not required for ingress)"
+  2222/tcp: "SSH server (optional, enable in config)"
 
 # Add-on configuration options
 options:
@@ -36,6 +38,9 @@ options:
   claude_auto_update: true
   dangerously_skip_permissions: false
   claude_extra_args: ""
+  enable_ssh: false
+  ssh_port: 2222
+  ssh_authorized_keys: []
   persistent_apk_packages: []
   persistent_pip_packages: []
 schema:
@@ -46,6 +51,10 @@ schema:
   claude_auto_update: bool?
   dangerously_skip_permissions: bool?
   claude_extra_args: str?
+  enable_ssh: bool?
+  ssh_port: int?
+  ssh_authorized_keys:
+    - str
   persistent_apk_packages:
     - str
   persistent_pip_packages:
