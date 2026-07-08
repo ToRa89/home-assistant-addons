@@ -1,9 +1,50 @@
 # Changelog
 
-## 2.2.3
+## 2.3.4
 
 ### 🐛 Bug Fixes
 - **Fixed npm cache bloating Home Assistant backups** (#103): `HOME` points at the persistent `/data/home` for auth persistence, so npm defaulted its global cache there too, growing to several GB and getting swept into every backup. Pinned `npm_config_cache` to `/tmp/npm-cache` (not persisted, not backed up) and added a one-time startup cleanup of any legacy cache already sitting in `/data/home/.npm`.
+
+### ✨ New Features
+- **SSH server access** (`enable_ssh`, disabled by default): connect to the add-on container directly over SSH instead of the web terminal, with `ssh_port` and `ssh_authorized_keys` options. Password auth is disabled; public key only. Host keys persist across restarts
+- **Configurable working directory** (`working_directory`, default `/config`) and `prompt_working_directory` to confirm or change it on every session open
+- **Configurable Claude data path** (`claude_data_path`): relocate `~/.claude` session/config data out of the container-only `/data` volume into a path like `/config/.claude`, making sessions visible over SMB and portable across HA migrations
+
+## 2.3.3
+
+### 🐛 Bug Fixes
+- **Fixed "WebSocket not connected" in ha-mcp template rendering**: Bumped the pinned ha-mcp from 3.5.1 (four major versions behind) to 7.9.0. REST-based tools worked on 3.5.1, but WebSocket-based tools like `ha_eval_template` failed; the WebSocket path through the Supervisor proxy was verified healthy, isolating the bug to the old ha-mcp client. ha-mcp 7.9.0 exposes 77 tools (verified via MCP `tools/list`)
+
+### ✨ New Features
+- **`ha_mcp_version` option** (default `"7.9.0"`): The ha-mcp version is now configurable from the add-on options, so future bumps don't require an add-on update
+
+### 🛠️ Technical Details
+- Every ha-mcp release after 3.5.1 requires CPython 3.13 exactly (`>=3.13,<3.14`), which no Alpine release ships (3.21–3.23 have 3.12, 3.24 has 3.14) — this is why the pin was stuck at 3.5.1
+- uv now comes from the official installer (0.11.26) instead of the outdated Alpine package (0.5.31), because only recent uv can download managed musl Python builds; `uvx --python 3.13` provisions CPython 3.13 into `/data` (persistent)
+- The uv caches are pre-warmed in the background at startup so the first MCP connection doesn't hit the client startup timeout
+- armv7 has no managed musl Python builds and stays on ha-mcp 3.5.1 (the last release supporting the system Python)
+
+## 2.3.2
+
+### 🐛 Bug Fixes
+- Fixed welcome banner border misalignment on the version line (padding was 3 columns short)
+
+## 2.3.1
+
+### ✨ New Features
+- **Claude Code stays up to date** (`claude_auto_update`, enabled by default): The add-on now installs the official native Claude Code build into `/data` on first startup and checks for updates in the background on every restart
+  - The npm copy baked into the image is frozen at whatever version was current when the image was built on your machine; the native install in `/data` persists across restarts and keeps itself current
+  - Native install is used on amd64/aarch64; armv7 (no native builds) and offline starts fall back to the bundled npm copy
+  - Set `claude_auto_update: false` to keep using the bundled version
+- **Startup hooks**: Shell scripts in `/data/init.d/*.sh` are sourced during startup, giving users a persistent way to customize the ephemeral container (environment variables, `PATH`, tool setup) — following the same philosophy as `persistent_apk_packages`
+- **`dangerously_skip_permissions` option** (disabled by default): Launch Claude with `--dangerously-skip-permissions` so it never prompts before running tools. Sets `IS_SANDBOX=1`, which Claude Code requires before accepting the flag as root. Read the security note in the documentation before enabling
+- **`claude_extra_args` option**: Extra command-line flags appended to every Claude launch (auto-launch and session picker), e.g. `--continue` or `--model claude-sonnet-5`
+- **Welcome banner shows the Claude Code version** and whether it is the self-updating native install or the copy bundled in the image — no shell access needed to verify what is running
+
+### 🛠️ Technical Details
+- `$HOME/.local/bin` (i.e. `/data/home/.local/bin`) is now prepended to `PATH`, so a persistent native Claude install takes precedence over the bundled npm copy everywhere: auto-launch, session picker, auth helper, and MCP setup all invoke `claude` unqualified
+- First-time native install probes connectivity first and is capped at 5 minutes; subsequent update checks run in the background and never delay startup
+- The add-on log reports the active binary at startup: `Active Claude Code: /data/home/.local/bin/claude 2.1.201`
 
 ## 2.2.2
 

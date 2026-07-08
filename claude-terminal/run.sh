@@ -6,17 +6,25 @@ set -o pipefail
 
 # Initialize environment for Claude Code CLI using /data (HA best practice)
 init_environment() {
-    # Use /data exclusively - guaranteed writable by HA Supervisor
-    local data_home="/data/home"
-    local config_dir="/data/.config"
-    local cache_dir="/data/.cache"
-    local state_dir="/data/.local/state"
-    local claude_config_dir="/data/.config/claude"
+    # Allow user to override the data base directory (e.g. /config/.claude-data)
+    # so that Claude sessions/config are accessible via the HA /config volume.
+    # Defaults to /data (HA Supervisor guaranteed-writable volume).
+    local data_base
+    data_base=$(bashio::config 'claude_data_path' '')
+    if [ -z "$data_base" ] || [ "$data_base" = "null" ]; then
+        data_base="/data"
+    fi
 
-    bashio::log.info "Initializing Claude Code environment in /data..."
+    local data_home="${data_base}/home"
+    local config_dir="${data_base}/.config"
+    local cache_dir="${data_base}/.cache"
+    local state_dir="${data_base}/.local/state"
+    local claude_config_dir="${data_base}/.config/claude"
+
+    bashio::log.info "Initializing Claude Code environment in ${data_base}..."
 
     # Create all required directories
-    if ! mkdir -p "$data_home" "$config_dir/claude" "$cache_dir" "$state_dir" "/data/.local"; then
+    if ! mkdir -p "$data_home" "$config_dir/claude" "$cache_dir" "$state_dir" "${data_base}/.local"; then
         bashio::log.error "Failed to create directories in /data"
         exit 1
     fi
@@ -29,11 +37,16 @@ init_environment() {
     export XDG_CONFIG_HOME="$config_dir"
     export XDG_CACHE_HOME="$cache_dir"
     export XDG_STATE_HOME="$state_dir"
-    export XDG_DATA_HOME="/data/.local/share"
-    
+    export XDG_DATA_HOME="${data_base}/.local/share"
+
     # Claude-specific environment variables
     export ANTHROPIC_CONFIG_DIR="$claude_config_dir"
-    export ANTHROPIC_HOME="/data"
+    export ANTHROPIC_HOME="$data_base"
+
+    # Prefer a persistent native Claude Code install under /data over the npm
+    # copy baked into the image (frozen at whatever version was current when
+    # the image was built). Propagates through ttyd -> bash -> tmux -> claude.
+    export PATH="${data_home}/.local/bin:${PATH}"
 
     # One-time cleanup of npm caches accumulated in /data before the image
     # started pinning npm_config_cache to /tmp (see issue #103) - these were
@@ -192,6 +205,96 @@ install_persistent_packages() {
     fi
 }
 
+# Install or update a persistent native Claude Code build under /data.
+# The npm copy baked into the image is frozen at image build time and the
+# container filesystem is recreated on every restart, so a native install in
+# /data is the only way to keep Claude Code current across restarts.
+update_claude_native() {
+    local claude_auto_update
+    claude_auto_update=$(bashio::config 'claude_auto_update' 'true')
+
+    if [ "$claude_auto_update" != "true" ]; then
+        bashio::log.info "Claude Code auto-update disabled in configuration"
+        return 0
+    fi
+
+    # Native builds are only published for x86_64/aarch64; other architectures
+    # (armv7) keep the npm copy bundled in the image
+    local machine
+    machine=$(uname -m)
+    case "$machine" in
+        x86_64|aarch64) ;;
+        *)
+            bashio::log.info "No native Claude Code build for ${machine}, using bundled npm version"
+            return 0
+            ;;
+    esac
+
+    if [ -x "${HOME}/.local/bin/claude" ]; then
+        # Native install already present: check for updates in the background
+        # so startup is never delayed
+        bashio::log.info "Native Claude Code found, checking for updates in background..."
+        (timeout 300 "${HOME}/.local/bin/claude" update >/dev/null 2>&1 || true) &
+    else
+        # First run: install the native build (one-time cost). Probe
+        # connectivity first so an offline boot is not delayed.
+        if ! curl -fsSL -m 10 -o /dev/null https://claude.ai/install.sh 2>/dev/null; then
+            bashio::log.warning "Cannot reach claude.ai, using bundled npm Claude Code for now"
+            return 0
+        fi
+        bashio::log.info "Installing native Claude Code build to ${HOME}/.local/bin (persists in /data)..."
+        if timeout 300 bash -c "curl -fsSL https://claude.ai/install.sh | bash" >/dev/null 2>&1; then
+            bashio::log.info "Native Claude Code installed successfully"
+        else
+            bashio::log.warning "Native Claude Code install failed, using bundled npm version"
+        fi
+    fi
+
+    bashio::log.info "Active Claude Code: $(command -v claude || echo 'not found') $(claude --version 2>/dev/null || echo '(version unavailable)')"
+}
+
+# Assemble extra launch flags for claude, exported as CLAUDE_LAUNCH_ARGS so
+# both the auto-launch command and the session picker apply them consistently.
+setup_claude_launch_args() {
+    local launch_args=""
+
+    # Opt-in bypass of Claude Code's permission prompts. Claude refuses this
+    # flag for the root user unless IS_SANDBOX=1 marks the environment as a
+    # disposable container, which this add-on is.
+    if bashio::config.true 'dangerously_skip_permissions'; then
+        bashio::log.warning "dangerously_skip_permissions is enabled: Claude will not ask before running tools"
+        export IS_SANDBOX=1
+        launch_args="--dangerously-skip-permissions"
+    fi
+
+    local extra_args
+    extra_args=$(bashio::config 'claude_extra_args' '')
+    if [ -n "$extra_args" ] && [ "$extra_args" != "null" ]; then
+        launch_args="${launch_args} ${extra_args}"
+    fi
+
+    CLAUDE_LAUNCH_ARGS=$(echo "$launch_args" | xargs)
+    export CLAUDE_LAUNCH_ARGS
+    if [ -n "$CLAUDE_LAUNCH_ARGS" ]; then
+        bashio::log.info "Claude launch args: ${CLAUDE_LAUNCH_ARGS}"
+    fi
+}
+
+# Source user-provided init hooks from /data/init.d (persists across restarts).
+# Escape hatch for customizing the ephemeral container at startup, e.g.
+# exporting environment variables or adjusting PATH before ttyd launches.
+source_user_init_hooks() {
+    if [ -d /data/init.d ]; then
+        local hook
+        for hook in /data/init.d/*.sh; do
+            [ -r "$hook" ] || continue
+            bashio::log.info "Sourcing user init hook: ${hook}"
+            # shellcheck disable=SC1090
+            source "$hook" || bashio::log.warning "Init hook failed: ${hook}"
+        done
+    fi
+}
+
 # Setup session picker script
 setup_session_picker() {
     # Copy session picker script from built-in location
@@ -242,6 +345,16 @@ setup_session_picker() {
         fi
     fi
 
+    # Setup working directory picker script
+    if [ -f "/opt/scripts/pick-working-dir.sh" ]; then
+        if cp /opt/scripts/pick-working-dir.sh /usr/local/bin/pick-working-dir; then
+            chmod +x /usr/local/bin/pick-working-dir
+            bashio::log.info "Working directory picker installed successfully"
+        else
+            bashio::log.warning "Failed to copy pick-working-dir script"
+        fi
+    fi
+
     # Write add-on version for welcome script to read (avoids bashio dependency in ttyd)
     bashio::addon.version > /opt/scripts/addon-version 2>/dev/null || echo "unknown" > /opt/scripts/addon-version
 }
@@ -278,24 +391,48 @@ get_claude_launch_command() {
     # Get configuration value, default to true for backward compatibility
     auto_launch_claude=$(bashio::config 'auto_launch_claude' 'true')
 
+    # Get working directory, default to /config
+    local working_dir
+    working_dir=$(bashio::config 'working_directory' '/config')
+    if [ -z "$working_dir" ] || [ "$working_dir" = "null" ]; then
+        working_dir="/config"
+    fi
+
+    # If prompt_working_directory is enabled, source the picker script so the
+    # user can confirm or change the dir on each session open.
+    local prompt_dir
+    prompt_dir=$(bashio::config 'prompt_working_directory' 'false')
+    local cd_prefix
+    if [ "$prompt_dir" = "true" ] && [ -f /usr/local/bin/pick-working-dir ]; then
+        cd_prefix=". /usr/local/bin/pick-working-dir '${working_dir}'; "
+    else
+        cd_prefix="cd '${working_dir}' 2>/dev/null || cd /config; "
+    fi
+
     # Prepend welcome banner if available (runs inside ttyd, user-visible)
     local welcome_prefix=""
     if [ -f /usr/local/bin/welcome ]; then
         welcome_prefix="welcome; "
     fi
 
+    # Apply configured launch flags (see setup_claude_launch_args)
+    local claude_cmd="claude"
+    if [ -n "${CLAUDE_LAUNCH_ARGS:-}" ]; then
+        claude_cmd="claude ${CLAUDE_LAUNCH_ARGS}"
+    fi
+
     if [ "$auto_launch_claude" = "true" ]; then
         # Use tmux for session persistence - attach to existing or create new
-        echo "${welcome_prefix}tmux new-session -A -s claude 'claude'"
+        echo "${welcome_prefix}${cd_prefix}tmux new-session -A -s claude '${claude_cmd}'"
     else
         # Session picker manages its own tmux sessions internally,
         # so do NOT wrap it in tmux (that would cause nested tmux errors)
         if [ -f /usr/local/bin/claude-session-picker ]; then
-            echo "${welcome_prefix}/usr/local/bin/claude-session-picker"
+            echo "${welcome_prefix}${cd_prefix}/usr/local/bin/claude-session-picker"
         else
             # Fallback if session picker is missing
             bashio::log.warning "Session picker not found, falling back to auto-launch"
-            echo "${welcome_prefix}tmux new-session -A -s claude 'claude'"
+            echo "${welcome_prefix}${cd_prefix}tmux new-session -A -s claude '${claude_cmd}'"
         fi
     fi
 }
@@ -351,6 +488,75 @@ run_health_check() {
     fi
 }
 
+# Optionally start an SSH server for remote access (VS Code, terminal, etc.)
+setup_ssh() {
+    local enable_ssh
+    enable_ssh=$(bashio::config 'enable_ssh' 'false')
+
+    if [ "$enable_ssh" != "true" ]; then
+        bashio::log.info "SSH server disabled"
+        return 0
+    fi
+
+    local ssh_port
+    ssh_port=$(bashio::config 'ssh_port' '2222')
+
+    bashio::log.info "Setting up SSH server on port ${ssh_port}..."
+
+    # Install openssh server if not already present
+    if ! command -v sshd &>/dev/null; then
+        apk add --no-cache openssh || { bashio::log.error "Failed to install openssh"; return 1; }
+    fi
+
+    # Persist host keys in data dir so they survive container restarts
+    local host_key_dir="${ANTHROPIC_HOME}/ssh"
+    mkdir -p "$host_key_dir"
+    chmod 700 "$host_key_dir"
+
+    for key_type in rsa ed25519; do
+        local key_file="${host_key_dir}/ssh_host_${key_type}_key"
+        if [ ! -f "$key_file" ]; then
+            ssh-keygen -t "$key_type" -f "$key_file" -N "" -q
+            bashio::log.info "Generated SSH host key: ${key_file}"
+        fi
+    done
+
+    # Write authorized keys from config
+    local ssh_user_dir="${HOME}/.ssh"
+    mkdir -p "$ssh_user_dir"
+    chmod 700 "$ssh_user_dir"
+    local auth_keys_file="${ssh_user_dir}/authorized_keys"
+    : > "$auth_keys_file"
+
+    local keys_raw
+    keys_raw=$(bashio::config 'ssh_authorized_keys' 2>/dev/null || echo "")
+    if [ -n "$keys_raw" ]; then
+        # bashio returns JSON array for multi-value or raw string for single value
+        if echo "$keys_raw" | jq -e 'type == "array"' > /dev/null 2>&1; then
+            echo "$keys_raw" | jq -r '.[]' >> "$auth_keys_file"
+        else
+            echo "$keys_raw" >> "$auth_keys_file"
+        fi
+    fi
+    bashio::log.info "SSH authorized keys written: $(wc -l < "$auth_keys_file" | tr -d ' ') key(s)"
+    chmod 600 "$auth_keys_file"
+
+    # Write minimal sshd config
+    cat > /etc/ssh/sshd_config <<EOF
+Port ${ssh_port}
+HostKey ${host_key_dir}/ssh_host_rsa_key
+HostKey ${host_key_dir}/ssh_host_ed25519_key
+AuthorizedKeysFile ${auth_keys_file}
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitRootLogin yes
+EOF
+
+    # Start sshd in background
+    /usr/sbin/sshd || { bashio::log.error "Failed to start sshd"; return 1; }
+    bashio::log.info "SSH server started on port ${ssh_port}"
+}
+
 # Setup ha-mcp (Home Assistant MCP Server) for Claude Code integration
 setup_ha_mcp() {
     if [ -f "/opt/scripts/setup-ha-mcp.sh" ]; then
@@ -375,7 +581,11 @@ main() {
     install_tools
     setup_session_picker
     install_persistent_packages
+    update_claude_native
+    setup_claude_launch_args
+    source_user_init_hooks
     generate_ha_context
+    setup_ssh
     setup_ha_mcp
     start_web_terminal
 }
