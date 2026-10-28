@@ -28,7 +28,14 @@ LOXONE_DOWNLOAD_PAGE="${LXC_DOWNLOAD_PAGE:-https://www.loxone.com/dede/support/d
 LOXONE_SETUP_URL="${LXC_SETUP_URL:-}"               # direkter Link auf LoxoneConfigSetup_*.zip, optional
 LOXONE_SETUP_FILE="${LXC_SETUP_FILE:-}"             # lokale .zip oder .exe, optional
 LOXONE_SETUP_ARGS="${LXC_SETUP_ARGS:-}"             # zusaetzliche Installer-Argumente, optional
-APP_DIR="${LXC_APP_DIR:-$HOME/Applications}"
+# Starter landet im Finder-Ordner "Programme" (/Applications), sonst im persoenlichen ~/Applications.
+if [ -n "${LXC_APP_DIR:-}" ]; then
+    APP_DIR="$LXC_APP_DIR"
+elif [ -w /Applications ]; then
+    APP_DIR="/Applications"
+else
+    APP_DIR="$HOME/Applications"
+fi
 CMD_IS_CTRL="${LXC_CMD_IS_CTRL:-y}"                 # Cmd-Taste als Strg (Cmd+C/V/S)
 RETINA_MODE="${LXC_RETINA:-n}"                      # y = volle Retina-Aufloesung (kleinere UI)
 
@@ -349,6 +356,8 @@ build_app() {
     local app="$APP_DIR/Loxone Config.app" icon_src
     log "Erzeuge App-Starter: $app"
     rm -rf "$app"
+    # Aeltere Versionen haben den Starter immer in ~/Applications abgelegt.
+    if [ "$APP_DIR" != "$HOME/Applications" ]; then rm -rf "$HOME/Applications/Loxone Config.app"; fi
     mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
     # Das Steuer-Skript wird in den Datenordner kopiert, damit die App unabhaengig vom Repo laeuft.
@@ -469,6 +478,11 @@ cmd_doctor() {
     exe="$(find_loxone_exe)"
     printf 'Loxone Config:  %s\n' "$(state_get loxone_version || true)"
     printf 'Programmdatei:  %s\n' "${exe:-nicht gefunden}"
+    if [ -d "$APP_DIR/Loxone Config.app" ]; then
+        printf 'App-Starter:    %s\n' "$APP_DIR/Loxone Config.app"
+    else
+        printf 'App-Starter:    fehlt (mit "%s app" anlegen)\n' "$0"
+    fi
     fontdir="$WINEPREFIX/drive_c/windows/Fonts"
     printf 'Schriften:      %s\n' "$(find "$fontdir" -maxdepth 1 \( -iname 'arial*' -o -iname 'tahoma*' -o -iname 'verdana*' -o -iname 'cour*' \) 2>/dev/null | wc -l | tr -d ' ') Kernschrift-Dateien in $fontdir"
     if [ -f "$WINEPREFIX/drive_c/windows/system32/mfc140u.dll" ]; then
@@ -483,7 +497,7 @@ cmd_uninstall() {
     read -r answer
     case "$answer" in
         j|J|y|Y)
-            rm -rf "$BASE_DIR" "$APP_DIR/Loxone Config.app"
+            rm -rf "$BASE_DIR" "/Applications/Loxone Config.app" "$HOME/Applications/Loxone Config.app"
             log "Entfernt."
             ;;
         *) log "Abgebrochen." ;;

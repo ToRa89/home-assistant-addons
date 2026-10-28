@@ -1,6 +1,6 @@
 # Loxone Config auf macOS (Wine)
 
-Loxone Config gibt es nur für Windows. Dieses Skript richtet auf dem Mac eine eigene Wine-Umgebung ein, installiert die nötigen Laufzeiten und Schriften, spielt Loxone Config ein und legt einen Starter in `~/Applications` an. Updates von Wine, winetricks und Loxone Config laufen über einen Befehl.
+Loxone Config gibt es nur für Windows. Dieses Skript richtet auf dem Mac eine eigene Wine-Umgebung ein, installiert die nötigen Laufzeiten und Schriften, spielt Loxone Config ein und legt einen Starter im Ordner „Programme“ (`/Applications`) an, ohne Schreibrecht dort in `~/Applications`. Updates von Wine, winetricks und Loxone Config laufen über einen Befehl.
 
 Loxone selbst unterstützt Wine offiziell nicht. Wer eine garantiert funktionierende Lösung braucht, nimmt eine Windows-VM (Parallels, VMware Fusion, UTM). Diese Lösung ist für den Alltag gedacht, in dem man ohne VM schnell eine Konfiguration öffnen, ändern und speichern will.
 
@@ -41,7 +41,7 @@ cd home-assistant-addons/loxone-config-macos
 ./loxone-config.sh install
 ```
 
-Während der Installation öffnet sich der Loxone-Installer als Windows-Fenster. Durchklicken und den Zielpfad nicht ändern. Danach liegt „Loxone Config“ in `~/Applications` und lässt sich ins Dock ziehen.
+Während der Installation öffnet sich der Loxone-Installer als Windows-Fenster. Durchklicken und den Zielpfad nicht ändern. Danach liegt „Loxone Config“ im Ordner „Programme“ und lässt sich ins Dock ziehen. Den Ort zeigt `./loxone-config.sh doctor` in der Zeile „App-Starter“.
 
 Findet das Skript den Download-Link nicht, weil Loxone die Seite umgebaut hat, den Installer im Browser laden und so einspielen:
 
