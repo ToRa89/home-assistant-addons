@@ -25,7 +25,7 @@ CrossOver (CodeWeavers, kostenpflichtig) ist die bequemere Alternative mit Suppo
 | fontsmooth=rgb | Subpixel-Glättung, sonst wirkt Text pixelig |
 | Schrift-Ersetzungen | Segoe UI, MS Shell Dlg und MS Sans Serif zeigen auf Tahoma |
 | Mac-Treiber-Optionen | Cmd wirkt als Strg (Cmd+C, Cmd+V, Cmd+S), Retina optional |
-| Loxone Config | Aktueller Installer von der Loxone-Download-Seite |
+| Loxone Config | Neuester Installer aus `~/Downloads`, sonst Link von der Loxone-Download-Seite |
 
 Ein .NET Framework wird nicht installiert. Nach den Erfahrungen aus dem Projekt `lian/docker-loxone-config` (Loxone Config 17.2 unter Wine 11 auf Linux) braucht Loxone Config 17 zur Laufzeit die VC++-Laufzeit mit `mfc140u.dll` und bringt eine eigene Qt-WebEngine mit. Eine .NET-Abhängigkeit ist dort nicht aufgefallen, für eventuelle Reste reicht das mitgelieferte Wine-Mono.
 
@@ -43,11 +43,7 @@ cd home-assistant-addons/loxone-config-macos
 
 Während der Installation öffnet sich der Loxone-Installer als Windows-Fenster. Durchklicken und den Zielpfad nicht ändern. Danach liegt „Loxone Config“ im Ordner „Programme“ und lässt sich ins Dock ziehen. Den Ort zeigt `./loxone-config.sh doctor` in der Zeile „App-Starter“.
 
-Findet das Skript den Download-Link nicht, weil Loxone die Seite umgebaut hat, den Installer im Browser laden und so einspielen:
-
-```bash
-LXC_SETUP_FILE=~/Downloads/LoxoneConfigSetup_17020828.zip ./loxone-config.sh update-loxone
-```
+Den Installer lädt man am besten vorher im Browser (loxone.com, Support, Downloads, Loxone Config) nach `~/Downloads`. Das Skript nimmt dort die neueste `LoxoneConfigSetup_*.zip`. Der automatische Abruf von der Loxone-Seite ist nur der Rückfall: Die Seite liefert den Link per JavaScript aus, ein Skript sieht ihn in der Regel nicht (Stand Oktober 2026). Eine bestimmte Datei lässt sich mit `LXC_SETUP_FILE=/pfad/zur/datei.zip` erzwingen.
 
 ## Updates
 
@@ -55,7 +51,7 @@ LXC_SETUP_FILE=~/Downloads/LoxoneConfigSetup_17020828.zip ./loxone-config.sh upd
 ./loxone-config.sh update
 ```
 
-Das aktualisiert winetricks, lädt eine neuere Wine-Version (die vorherige bleibt als Rückfallebene liegen) und spielt eine neuere Loxone-Config-Version ein. Der Prefix mit allen Einstellungen bleibt erhalten. Einzeln geht es mit `update-wine` und `update-loxone`.
+Das aktualisiert winetricks, lädt eine neuere Wine-Version (die vorherige bleibt als Rückfallebene liegen) und spielt eine neuere Loxone-Config-Version ein, sofern der neue Installer in `~/Downloads` liegt. Der Prefix mit allen Einstellungen bleibt erhalten. Einzeln geht es mit `update-wine` und `update-loxone`.
 
 Loxone Config meldet neue Versionen auch selbst beim Start. Diese Meldung kann man nutzen, sicherer ist aber der Weg über das Skript, weil es danach den Prefix und den Starter prüft.
 

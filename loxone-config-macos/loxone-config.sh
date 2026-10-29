@@ -310,31 +310,44 @@ prepare_setup_exe() {
     printf '%s\n' "$exe"
 }
 
+newest_local_setup() {
+    # Neueste LoxoneConfigSetup_*.zip/.exe in ~/Downloads (oder LXC_DOWNLOAD_DIR).
+    find "${LXC_DOWNLOAD_DIR:-$HOME/Downloads}" -maxdepth 1 -type f \
+        \( -iname 'LoxoneConfigSetup_*.zip' -o -iname 'LoxoneConfigSetup_*.exe' \) 2>/dev/null \
+        | awk -F'LoxoneConfigSetup_' '{ print $NF " " $0 }' | sort -n | tail -1 | cut -d' ' -f2-
+}
+
 install_loxone() {
-    local force="${1:-}" url src version current exe
+    local force="${1:-}" url src version current exe downloaded=""
     current="$(state_get loxone_version)"
 
-    if [ -n "$LOXONE_SETUP_FILE" ]; then
-        src="$LOXONE_SETUP_FILE"
+    # Reihenfolge: ausdruecklich angegebene Datei, dann neuester Installer in ~/Downloads,
+    # zuletzt der Link von der Loxone-Seite (die liefert den Link oft nur per JavaScript aus).
+    src="$LOXONE_SETUP_FILE"
+    [ -n "$src" ] || src="$(newest_local_setup)"
+    if [ -n "$src" ]; then
         [ -f "$src" ] || die "Datei nicht gefunden: $src"
     else
         url="$(latest_loxone_url || true)"
         if [ -z "$url" ]; then
-            warn "Download-Link fuer Loxone Config nicht gefunden (Seitenaufbau geaendert?)."
-            warn "Installer manuell laden und mit LXC_SETUP_FILE=/pfad/LoxoneConfigSetup_xxx.zip $0 update-loxone einspielen."
-            return 1
-        fi
-        version="$(version_from_name "$url")"
-        if [ "$force" != "force" ] && [ "$current" = "$version" ] && [ -n "$(find_loxone_exe)" ]; then
-            log "Loxone Config $version ist aktuell."
+            warn "Kein Installer gefunden: weder in ~/Downloads noch als Link auf der Loxone-Seite."
+            warn "Installer im Browser laden (loxone.com > Support > Downloads > Loxone Config) und erneut '$0 update-loxone' ausfuehren."
             return 1
         fi
         src="$CACHE_DIR/$(basename "$url")"
+        downloaded=1
+    fi
+
+    version="$(version_from_name "$src")"
+    if [ "$force" != "force" ] && [ "$current" = "$version" ] && [ -n "$(find_loxone_exe)" ]; then
+        log "Loxone Config $version ist aktuell."
+        return 1
+    fi
+    if [ -n "$downloaded" ]; then
         mkdir -p "$CACHE_DIR"
         log "Lade Loxone Config $version"
         fetch "$url" "$src"
     fi
-    version="$(version_from_name "$src")"
 
     exe="$(prepare_setup_exe "$src")"
     log "Starte Loxone-Config-Installer ($version). Bitte im Installer durchklicken, Zielpfad nicht aendern."
@@ -344,7 +357,7 @@ install_loxone() {
 
     [ -n "$(find_loxone_exe)" ] || die "LoxoneConfig.exe nach der Installation nicht gefunden."
     state_set loxone_version "$version"
-    if [ -z "$LOXONE_SETUP_FILE" ]; then rm -f "$src"; fi
+    if [ -n "$downloaded" ]; then rm -f "$src"; fi
     rm -rf "$CACHE_DIR/setup"
     log "Loxone Config $version installiert."
 }
@@ -419,8 +432,8 @@ cmd_install() {
     apply_mac_settings
     if ! install_loxone force; then
         warn "Wine, Laufzeiten und Schriften sind eingerichtet, Loxone Config aber NICHT installiert."
-        warn "Installer im Browser laden (loxone.com > Support > Downloads) und einspielen mit:"
-        warn "  LXC_SETUP_FILE=~/Downloads/LoxoneConfigSetup_xxxxxxxx.zip $0 update-loxone"
+        warn "Installer im Browser nach ~/Downloads laden (loxone.com > Support > Downloads)"
+        warn "und danach '$0 update-loxone' ausfuehren."
     fi
     build_app
     log "Fertig. Start ueber '$APP_DIR/Loxone Config.app' oder '$0 run'."
