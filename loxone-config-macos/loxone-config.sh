@@ -370,7 +370,11 @@ build_app() {
     cat > "$app/Contents/MacOS/LoxoneConfig" <<EOF
 #!/bin/bash
 mkdir -p "$LOG_DIR"
-exec "$BASE_DIR/bin/loxone-config.sh" run >>"$LOG_DIR/app.log" 2>&1
+"$BASE_DIR/bin/loxone-config.sh" run >>"$LOG_DIR/app.log" 2>&1 || {
+    msg="\$(tail -n 1 "$LOG_DIR/app.log" | tr -d '\033' | sed -E 's/\[[0-9;]*m//g; s/"/\\\\"/g')"
+    /usr/bin/osascript -e "display alert \"Loxone Config startet nicht\" message \"\$msg\" as critical" >/dev/null 2>&1
+    exit 1
+}
 EOF
     chmod +x "$app/Contents/MacOS/LoxoneConfig"
 
@@ -413,7 +417,11 @@ cmd_install() {
     install_runtimes
     install_fonts
     apply_mac_settings
-    install_loxone force || true
+    if ! install_loxone force; then
+        warn "Wine, Laufzeiten und Schriften sind eingerichtet, Loxone Config aber NICHT installiert."
+        warn "Installer im Browser laden (loxone.com > Support > Downloads) und einspielen mit:"
+        warn "  LXC_SETUP_FILE=~/Downloads/LoxoneConfigSetup_xxxxxxxx.zip $0 update-loxone"
+    fi
     build_app
     log "Fertig. Start ueber '$APP_DIR/Loxone Config.app' oder '$0 run'."
 }
