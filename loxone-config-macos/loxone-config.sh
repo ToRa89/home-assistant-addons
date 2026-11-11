@@ -445,6 +445,10 @@ cmd_run() {
     exe="$(find_loxone_exe)"
     [ -n "$exe" ] || die "Loxone Config ist nicht installiert. Zuerst '$0 install' ausfuehren."
     mkdir -p "$LOG_DIR"
+    # Ab Loxone Config 17.3 zeichnet Qt Quick ueber Direct3D 11. Wine uebersetzt das auf das
+    # macOS-OpenGL und kann dabei keine Shader anlegen, das Hauptfenster bleibt weiss.
+    # Mit dem OpenGL-Backend von Qt entfaellt der Umweg ueber Direct3D.
+    export QSG_RHI_BACKEND="${QSG_RHI_BACKEND:-opengl}"
     cd "$(dirname "$exe")"
     exec "$WINE" "$exe" "$@"
 }

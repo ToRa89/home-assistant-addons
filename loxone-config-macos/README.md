@@ -92,6 +92,8 @@ Die Miniserver-Suche im Netzwerk (UDP-Broadcast) kann unter Wine scheitern. Dann
 
 Die Anmeldung mit dem Loxone-Konto über das eingebettete Browserfenster ist unter Wine nicht verlässlich getestet. Das Skript setzt `QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox`, damit das Fenster überhaupt startet.
 
+Ab Loxone Config 17.3 zeichnet die Oberfläche Teile über Qt Quick, unter Windows standardmäßig mit Direct3D 11. Wine übersetzt Direct3D 11 auf das OpenGL von macOS und scheitert dabei an den Shadern, das Hauptfenster bleibt dann bis auf die Titelleiste weiß. Im Loxone-Log (`prefix/drive_c/users/<Benutzer>/AppData/Local/Loxone/Loxone Config/Logs/config.log`) steht dazu `D3D11 smoke test: Failed to create vertex shader`. Das Skript startet Loxone Config deshalb mit `QSG_RHI_BACKEND=opengl`, Qt zeichnet damit direkt über OpenGL. Wer das Verhalten ändern will, setzt die Variable vor dem Start selbst, zum Beispiel `QSG_RHI_BACKEND=d3d11 ./loxone-config.sh run`. Nach einem Update aus Loxone Config heraus muss der Starter nicht neu erzeugt werden, die Einstellung steckt im Skript.
+
 Beim ersten Start kann die Titelleiste mit Speichern-Knopf und Tabs abgeschnitten sein. Fenster einmal maximieren oder verschieben behebt das in der Regel.
 
 Rosetta 2 ist eine Abhängigkeit mit Ablaufdatum. Apple hat angekündigt, Rosetta nach macOS 27 nur noch eingeschränkt anzubieten. Sobald es native arm64-Builds von Wine für macOS gibt, wird das Skript darauf umgestellt werden müssen.
